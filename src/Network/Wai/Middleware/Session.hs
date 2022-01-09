@@ -2,6 +2,8 @@ module Network.Wai.Middleware.Session
   ( withSession,
     withSession',
     session,
+    Encode,
+    Decode,
   )
 where
 
@@ -32,7 +34,17 @@ vaultKey :: V.Key (Maybe a, (Maybe a -> IO ()))
 vaultKey = unsafePerformIO V.newKey
 {-# NOINLINE vaultKey #-}
 
-withSession :: Encode a -> Decode a -> ByteString -> ByteString -> Middleware
+withSession ::
+  -- | Encoder for session
+  Encode a ->
+  -- | Decoder for session
+  Decode a ->
+  -- | Secret used for encryption
+  ByteString ->
+  -- | Cookie name
+  ByteString ->
+  -- | Middleware
+  Middleware
 withSession encode decode secret cookieName =
   withSession' encode decode secret $
     defaultSetCookie
@@ -42,7 +54,17 @@ withSession encode decode secret cookieName =
         setCookieMaxAge = Just (365 * 24 * 60 * 60)
       }
 
-withSession' :: Encode a -> Decode a -> ByteString -> SetCookie -> Middleware
+withSession' ::
+  -- | Encoder for session
+  Encode a ->
+  -- | Decoder for session
+  Decode a ->
+  -- | Secret used for encryption
+  ByteString ->
+  -- | Cookie settings
+  SetCookie ->
+  -- | Middleware
+  Middleware
 withSession' encode decode secret cookie app req respond = do
   sessionM <- fromCookie decode secret cookie req
   ref <- newIORef sessionM
@@ -57,6 +79,9 @@ withSession' encode decode secret cookie app req respond = do
 padSecret :: ByteString -> ByteString
 padSecret s = B.append s $ B.concat (replicate (32 - B.length s) " ")
 
+-- | Returns the session and a function to update the session.
+--
+-- Passing `Nothing` to the setter will clear the session.
 session :: Request -> (Maybe a, (Maybe a -> IO ()))
 session req =
   fromMaybe (Nothing, (pure . const ())) $ V.lookup vaultKey (vault req)
